@@ -1,0 +1,6 @@
+{
+  "name": "ApexTrade - Professional Trading Journal & Analytics",
+  "description": "Professional institutional trading journal with capital risk calculation, multi-timeframe setup tracking, emotional bias analytics, and chart screenshot archiving.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
