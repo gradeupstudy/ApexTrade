@@ -22,6 +22,9 @@ import {
 import { 
   Trade, 
   TradeType, 
+  TradeDirection,
+  ScriptSource,
+  EntryType,
   TradeStatus, 
   SetupQuality, 
   EmotionType, 
@@ -58,9 +61,11 @@ export const TradeTable: React.FC<TradeTableProps> = ({
   onLoadSampleTrades
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [directionFilter, setDirectionFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
-  const [qualityFilter, setQualityFilter] = useState<string>('ALL');
+  const [entryTypeFilter, setEntryTypeFilter] = useState<string>('ALL');
+  const [sourceFilter, setSourceFilter] = useState<string>('ALL');
   const [ruleFilter, setRuleFilter] = useState<string>('ALL');
   const [emotionFilter, setEmotionFilter] = useState<string>('ALL');
   
@@ -140,14 +145,26 @@ export const TradeTable: React.FC<TradeTableProps> = ({
 
       if (!matchesSearch) return false;
 
+      // Direction
+      if (directionFilter !== 'ALL' && (t.tradeDirection || 'Long') !== directionFilter) return false;
+
       // Status
       if (statusFilter !== 'ALL' && t.status !== statusFilter) return false;
 
       // Trade Type
       if (typeFilter !== 'ALL' && t.tradeType !== typeFilter) return false;
 
-      // Quality
-      if (qualityFilter !== 'ALL' && t.setupQuality !== qualityFilter) return false;
+      // Entry Type
+      if (entryTypeFilter !== 'ALL' && (t.entryType || 'Direct') !== entryTypeFilter) return false;
+
+      // Script Source (with fallback to setupQuality)
+      if (sourceFilter !== 'ALL') {
+        const itemSource = t.scriptSource || (
+          t.setupQuality === 'A+' || t.setupQuality === 'A' ? 'HTF Running - I' :
+          t.setupQuality === 'B' ? 'HTF Running - II' : 'Other'
+        );
+        if (itemSource !== sourceFilter) return false;
+      }
 
       // Rule
       if (ruleFilter !== 'ALL' && t.ruleFollowed !== ruleFilter) return false;
@@ -180,7 +197,7 @@ export const TradeTable: React.FC<TradeTableProps> = ({
       if (strA > strB) return sortDirection === 'asc' ? 1 : -1;
       return 0;
     });
-  }, [trades, searchTerm, statusFilter, typeFilter, qualityFilter, ruleFilter, emotionFilter, monthFilter, yearFilter, sortField, sortDirection]);
+  }, [trades, searchTerm, directionFilter, statusFilter, typeFilter, entryTypeFilter, sourceFilter, ruleFilter, emotionFilter, monthFilter, yearFilter, sortField, sortDirection]);
 
   return (
     <div className="bg-[#0f172a] border border-slate-800 rounded-xl overflow-hidden shadow-xs">
@@ -280,6 +297,19 @@ export const TradeTable: React.FC<TradeTableProps> = ({
             </select>
           </div>
 
+          {/* Direction Filter */}
+          <div>
+            <select
+              value={directionFilter}
+              onChange={(e) => setDirectionFilter(e.target.value)}
+              className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-md text-xs text-slate-200 focus:outline-hidden focus:border-slate-600"
+            >
+              <option value="ALL">Direction: All</option>
+              <option value="Long">Long (Buy)</option>
+              <option value="Short">Short (Sell)</option>
+            </select>
+          </div>
+
           {/* Status Filter */}
           <div>
             <select
@@ -311,18 +341,31 @@ export const TradeTable: React.FC<TradeTableProps> = ({
             </select>
           </div>
 
-          {/* Setup Quality Filter */}
+          {/* Entry Type Filter */}
           <div>
             <select
-              value={qualityFilter}
-              onChange={(e) => setQualityFilter(e.target.value)}
+              value={entryTypeFilter}
+              onChange={(e) => setEntryTypeFilter(e.target.value)}
               className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-md text-xs text-slate-200 focus:outline-hidden focus:border-slate-600"
             >
-              <option value="ALL">Quality: All</option>
-              <option value="A+">A+</option>
-              <option value="A">A</option>
-              <option value="B">B</option>
-              <option value="C">C</option>
+              <option value="ALL">Entry: All</option>
+              <option value="Direct">Direct</option>
+              <option value="TBS">TBS</option>
+              <option value="PA">PA</option>
+            </select>
+          </div>
+
+          {/* Script Source Filter */}
+          <div>
+            <select
+              value={sourceFilter}
+              onChange={(e) => setSourceFilter(e.target.value)}
+              className="w-full px-2 py-1.5 bg-slate-950 border border-slate-800 rounded-md text-xs text-slate-200 focus:outline-hidden focus:border-slate-600"
+            >
+              <option value="ALL">Source: All</option>
+              <option value="HTF Running - I">HTF Running - I</option>
+              <option value="HTF Running - II">HTF Running - II</option>
+              <option value="Other">Other</option>
             </select>
           </div>
 
@@ -373,9 +416,21 @@ export const TradeTable: React.FC<TradeTableProps> = ({
                   <ArrowUpDown className="w-2.5 h-2.5" />
                 </div>
               </th>
+              <th className="py-2.5 px-3 cursor-pointer hover:text-slate-200" onClick={() => handleSort('tradeDirection')}>
+                <div className="flex items-center gap-1">
+                  <span>Dir</span>
+                  <ArrowUpDown className="w-2.5 h-2.5" />
+                </div>
+              </th>
               <th className="py-2.5 px-3 cursor-pointer hover:text-slate-200" onClick={() => handleSort('tradeType')}>
                 <div className="flex items-center gap-1">
                   <span>Type</span>
+                  <ArrowUpDown className="w-2.5 h-2.5" />
+                </div>
+              </th>
+              <th className="py-2.5 px-3 cursor-pointer hover:text-slate-200" onClick={() => handleSort('entryType')}>
+                <div className="flex items-center gap-1">
+                  <span>Entry</span>
                   <ArrowUpDown className="w-2.5 h-2.5" />
                 </div>
               </th>
@@ -395,7 +450,7 @@ export const TradeTable: React.FC<TradeTableProps> = ({
               <th className="py-2.5 px-3 text-right">Act. Qty</th>
               <th className="py-2.5 px-3 text-right">Exit Price</th>
               <th className="py-2.5 px-3">Exit Date</th>
-              <th className="py-2.5 px-3 text-center">Quality</th>
+              <th className="py-2.5 px-3 text-center">Script Source</th>
               <th className="py-2.5 px-3 text-center">Status</th>
               <th className="py-2.5 px-3 text-right cursor-pointer hover:text-slate-200" onClick={() => handleSort('pnlRupee')}>
                 <div className="flex items-center justify-end gap-1">
@@ -413,7 +468,7 @@ export const TradeTable: React.FC<TradeTableProps> = ({
           <tbody className="divide-y divide-slate-800/60 font-mono">
             {filteredTrades.length === 0 ? (
               <tr>
-                <td colSpan={24} className="text-center py-12 text-slate-500">
+                <td colSpan={26} className="text-center py-12 text-slate-500">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <p className="text-sm font-sans text-slate-400">No trades match your filter criteria.</p>
                     <button
@@ -431,6 +486,11 @@ export const TradeTable: React.FC<TradeTableProps> = ({
                 const isPositive = trade.pnlRupee > 0;
                 const isNegative = trade.pnlRupee < 0;
                 const isSelected = selectedIds.includes(trade.id);
+                const isShort = trade.tradeDirection === 'Short';
+                const source = trade.scriptSource || (
+                  trade.setupQuality === 'A+' || trade.setupQuality === 'A' ? 'HTF Running - I' :
+                  trade.setupQuality === 'B' ? 'HTF Running - II' : 'Other'
+                );
 
                 return (
                   <tr key={trade.id} className={`transition-colors ${isSelected ? 'bg-emerald-950/20' : 'hover:bg-slate-900/50'}`}>
@@ -460,9 +520,27 @@ export const TradeTable: React.FC<TradeTableProps> = ({
                       {trade.script}
                     </td>
 
+                    {/* Trade Direction (Long / Short) */}
+                    <td className="py-2 px-3">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded font-mono ${
+                        isShort 
+                          ? 'bg-rose-950/60 text-rose-300 border border-rose-500/30' 
+                          : 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/30'
+                      }`}>
+                        {isShort ? 'SHORT' : 'LONG'}
+                      </span>
+                    </td>
+
                     {/* Trade Type */}
                     <td className="py-2 px-3">
                       <span className="font-bold text-slate-200">{trade.tradeType}</span>
+                    </td>
+
+                    {/* Entry Type */}
+                    <td className="py-2 px-3">
+                      <span className="text-sky-300 font-mono text-[11px] bg-sky-950/40 px-1.5 py-0.5 rounded border border-sky-500/20">
+                        {trade.entryType || 'Direct'}
+                      </span>
                     </td>
 
                     {/* Risk Per Trade */}
@@ -477,14 +555,22 @@ export const TradeTable: React.FC<TradeTableProps> = ({
                       </span>
                     </td>
 
-                    {/* Entry Price */}
+                    {/* Plan Entry Price */}
                     <td className="py-2 px-3 text-right text-slate-300 tabular-nums">
                       ₹{trade.entryPrice.toFixed(2)}
                     </td>
 
-                    {/* Actual Entry Price */}
+                    {/* Actual Entry Price (Shows 'Pending' badge if empty or 0) */}
                     <td className="py-2 px-3 text-right text-slate-200 font-medium tabular-nums">
-                      ₹{trade.actualEntryPrice.toFixed(2)}
+                      {trade.actualEntryPrice && trade.actualEntryPrice > 0 ? (
+                        `₹${trade.actualEntryPrice.toFixed(2)}`
+                      ) : trade.status === 'Pending' ? (
+                        <span className="text-[10px] text-amber-400 font-mono bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-500/20">
+                          Pending
+                        </span>
+                      ) : (
+                        '—'
+                      )}
                     </td>
 
                     {/* Stop Loss */}
@@ -509,7 +595,7 @@ export const TradeTable: React.FC<TradeTableProps> = ({
 
                     {/* Actual Quantity */}
                     <td className="py-2 px-3 text-right text-slate-100 font-medium tabular-nums">
-                      {trade.actualQuantity}
+                      {trade.actualQuantity > 0 ? trade.actualQuantity : trade.status === 'Pending' ? '—' : trade.quantity}
                     </td>
 
                     {/* Exit Price */}
@@ -524,14 +610,14 @@ export const TradeTable: React.FC<TradeTableProps> = ({
                       {trade.exitDate || '—'}
                     </td>
 
-                    {/* Setup Quality */}
+                    {/* Script Source */}
                     <td className="py-2 px-3 text-center">
-                      <span className={`font-bold ${
-                        trade.setupQuality === 'A+' ? 'text-emerald-400' :
-                        trade.setupQuality === 'A' ? 'text-sky-400' :
-                        trade.setupQuality === 'B' ? 'text-amber-400' : 'text-rose-400'
+                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded border ${
+                        source === 'HTF Running - I' ? 'bg-emerald-950/40 text-emerald-300 border-emerald-500/30' :
+                        source === 'HTF Running - II' ? 'bg-sky-950/40 text-sky-300 border-sky-500/30' :
+                        'bg-slate-900 text-slate-300 border-slate-800'
                       }`}>
-                        {trade.setupQuality}
+                        {source}
                       </span>
                     </td>
 
@@ -771,8 +857,8 @@ export const TradeTable: React.FC<TradeTableProps> = ({
 
             <div className="bg-slate-950/80 p-2.5 rounded-lg border border-slate-800 mb-4 text-[11px] font-mono space-y-1 text-slate-400">
               <div className="flex justify-between">
-                <span>Type / Quality:</span>
-                <span className="text-slate-200 font-semibold">{tradeToDelete.tradeType} · {tradeToDelete.setupQuality}</span>
+                <span>Type / Source:</span>
+                <span className="text-slate-200 font-semibold">{tradeToDelete.tradeType} · {tradeToDelete.scriptSource || tradeToDelete.setupQuality || 'HTF Running - I'}</span>
               </div>
               <div className="flex justify-between">
                 <span>Entry / SL:</span>

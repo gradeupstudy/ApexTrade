@@ -122,8 +122,14 @@ export const ChartVaultView: React.FC<ChartVaultViewProps> = ({
                       <span>·</span>
                       <span className="font-sans text-sm">{trade.script}</span>
                     </div>
-                    <div className="text-[11px] text-slate-400 font-mono mt-0.5">
-                      {trade.tradeType} · Setup {trade.setupQuality}
+                    <div className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center gap-1.5">
+                      <span className={trade.tradeDirection === 'Short' ? 'text-rose-400 font-bold' : 'text-emerald-400 font-bold'}>
+                        {trade.tradeDirection || 'Long'}
+                      </span>
+                      <span>·</span>
+                      <span>{trade.tradeType}</span>
+                      <span>·</span>
+                      <span className="text-slate-300">{trade.scriptSource || trade.setupQuality || 'HTF Running - I'}</span>
                     </div>
                   </div>
 

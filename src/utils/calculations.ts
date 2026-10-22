@@ -1,4 +1,14 @@
-import { Trade, RiskPercent, CapitalMetrics, EmotionType, TradeType, SetupQuality } from '../types/trade';
+import { 
+  Trade, 
+  RiskPercent, 
+  CapitalMetrics, 
+  EmotionType, 
+  TradeType, 
+  SetupQuality, 
+  TradeDirection, 
+  ScriptSource, 
+  EntryType 
+} from '../types/trade';
 
 export function parseRiskPercent(riskStr: RiskPercent): number {
   switch (riskStr) {
@@ -43,33 +53,71 @@ export function calculateCapitalRequired(quantity: number, entryPrice: number): 
 }
 
 /**
+ * Planned Target Profit per unit:
+ * Long: Target - Entry Price (e.g. 120 - 100 = +20)
+ * Short: Entry Price - Target (e.g. 120 - 90 = +30)
+ */
+export function calculateProjectedTargetProfit(
+  entryPrice: number,
+  target: number,
+  direction: TradeDirection = 'Long'
+): number {
+  if (!entryPrice || !target) return 0;
+  const diff = direction === 'Short' ? entryPrice - target : target - entryPrice;
+  return Math.round(diff * 100) / 100;
+}
+
+/**
+ * Planned Risk (Stop Loss distance) per unit:
+ * Long: Entry Price - Stop Loss (e.g. 100 - 90 = 10)
+ * Short: Stop Loss - Entry Price (e.g. 125 - 120 = 5)
+ */
+export function calculateProjectedRisk(
+  entryPrice: number,
+  stopLoss: number,
+  direction: TradeDirection = 'Long'
+): number {
+  if (!entryPrice || !stopLoss) return 0;
+  const diff = direction === 'Short' ? stopLoss - entryPrice : entryPrice - stopLoss;
+  return Math.round(diff * 100) / 100;
+}
+
+/**
  * Profit / Loss in Rupee:
- * Based on (Exit Price - Actual Entry Price) * Actual Quantity
+ * Long: (Exit Price - Actual Entry Price) * Actual Quantity
+ * Short: (Actual Entry Price - Exit Price) * Actual Quantity
  * If positive: profit, if negative: loss
  */
 export function calculatePnL(
   exitPrice: number | null,
   actualEntryPrice: number,
-  actualQuantity: number
+  actualQuantity: number,
+  direction: TradeDirection = 'Long'
 ): number {
   if (exitPrice === null || exitPrice === undefined || isNaN(exitPrice)) return 0;
   if (!actualEntryPrice || isNaN(actualEntryPrice)) return 0;
   const qty = actualQuantity > 0 ? actualQuantity : 1;
-  const pnl = (exitPrice - actualEntryPrice) * qty;
+  const pnl = direction === 'Short'
+    ? (actualEntryPrice - exitPrice) * qty
+    : (exitPrice - actualEntryPrice) * qty;
   return Math.round(pnl * 100) / 100;
 }
 
 /**
  * Return on Investment (ROI in %):
- * ((Exit Price - Actual Entry Price) / Actual Entry Price) * 100
+ * Long: ((Exit Price - Actual Entry Price) / Actual Entry Price) * 100
+ * Short: ((Actual Entry Price - Exit Price) / Actual Entry Price) * 100
  */
 export function calculateROIPercent(
   exitPrice: number | null,
-  actualEntryPrice: number
+  actualEntryPrice: number,
+  direction: TradeDirection = 'Long'
 ): number {
   if (exitPrice === null || exitPrice === undefined || isNaN(exitPrice)) return 0;
   if (!actualEntryPrice || actualEntryPrice <= 0) return 0;
-  const roi = ((exitPrice - actualEntryPrice) / actualEntryPrice) * 100;
+  const roi = direction === 'Short'
+    ? ((actualEntryPrice - exitPrice) / actualEntryPrice) * 100
+    : ((exitPrice - actualEntryPrice) / actualEntryPrice) * 100;
   return Math.round(roi * 100) / 100;
 }
 
@@ -356,20 +404,26 @@ export function calculateStrategyAnalytics(trades: Trade[]): StrategyMetric[] {
   });
 }
 
-export interface SetupQualityMetric {
-  quality: SetupQuality;
+export interface ScriptSourceMetric {
+  source: ScriptSource;
   tradeCount: number;
   winCount: number;
   winRate: number;
   netPnL: number;
 }
 
-export function calculateQualityAnalytics(trades: Trade[]): SetupQualityMetric[] {
-  const qualities: SetupQuality[] = ['A+', 'A', 'B', 'C'];
+export function calculateScriptSourceAnalytics(trades: Trade[]): ScriptSourceMetric[] {
+  const sources: ScriptSource[] = ['HTF Running - I', 'HTF Running - II', 'Other'];
   const closed = trades.filter(t => t.status === 'Close');
 
-  return qualities.map(quality => {
-    const list = closed.filter(t => t.setupQuality === quality);
+  return sources.map(source => {
+    const list = closed.filter(t => {
+      if (t.scriptSource) return t.scriptSource === source;
+      // Fallback for legacy trades
+      if (source === 'HTF Running - I') return t.setupQuality === 'A+' || t.setupQuality === 'A';
+      if (source === 'HTF Running - II') return t.setupQuality === 'B';
+      return t.setupQuality === 'C';
+    });
     const tradeCount = list.length;
     let winCount = 0;
     let netPnL = 0;
@@ -383,13 +437,69 @@ export function calculateQualityAnalytics(trades: Trade[]): SetupQualityMetric[]
     const winRate = tradeCount > 0 ? (winCount / tradeCount) * 100 : 0;
 
     return {
-      quality,
+      source,
       tradeCount,
       winCount,
       winRate: Math.round(winRate * 10) / 10,
       netPnL: Math.round(netPnL)
     };
   });
+}
+
+export interface EntryTypeMetric {
+  entryType: EntryType;
+  tradeCount: number;
+  winCount: number;
+  winRate: number;
+  netPnL: number;
+}
+
+export function calculateEntryTypeAnalytics(trades: Trade[]): EntryTypeMetric[] {
+  const types: EntryType[] = ['Direct', 'TBS', 'PA'];
+  const closed = trades.filter(t => t.status === 'Close');
+
+  return types.map(entryType => {
+    const list = closed.filter(t => (t.entryType || 'Direct') === entryType);
+    const tradeCount = list.length;
+    let winCount = 0;
+    let netPnL = 0;
+
+    for (const t of list) {
+      const pnl = t.pnlRupee || 0;
+      netPnL += pnl;
+      if (pnl > 0) winCount++;
+    }
+
+    const winRate = tradeCount > 0 ? (winCount / tradeCount) * 100 : 0;
+
+    return {
+      entryType,
+      tradeCount,
+      winCount,
+      winRate: Math.round(winRate * 10) / 10,
+      netPnL: Math.round(netPnL)
+    };
+  });
+}
+
+// Backward-compatible alias for existing components
+export interface SetupQualityMetric {
+  quality: SetupQuality;
+  tradeCount: number;
+  winCount: number;
+  winRate: number;
+  netPnL: number;
+}
+
+export function calculateQualityAnalytics(trades: Trade[]): SetupQualityMetric[] {
+  const scriptSources = calculateScriptSourceAnalytics(trades);
+  return scriptSources.map(s => ({
+    quality: s.source as SetupQuality,
+    tradeCount: s.tradeCount,
+    winCount: s.winCount,
+    winRate: s.winRate,
+    netPnL: s.netPnL
+  }));
 }
 
 export interface EquityCurvePoint {

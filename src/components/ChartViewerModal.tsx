@@ -46,10 +46,23 @@ export const ChartViewerModal: React.FC<ChartViewerModalProps> = ({
             <div>
               <h2 className="text-base font-bold text-white flex items-center gap-2">
                 <span>{trade.script}</span>
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded font-mono ${
+                  trade.tradeDirection === 'Short' 
+                    ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40' 
+                    : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                }`}>
+                  {trade.tradeDirection || 'Long'}
+                </span>
                 <span className="text-xs font-mono font-normal text-slate-400">({trade.tradeType})</span>
               </h2>
-              <div className="flex items-center gap-2 text-xs text-slate-400 font-mono mt-0.5">
-                <span>Quality: {trade.setupQuality}</span>
+              <div className="flex items-center gap-2 text-xs text-slate-400 font-mono mt-0.5 flex-wrap">
+                <span>Source: <strong className="text-slate-300">{trade.scriptSource || trade.setupQuality || 'Other'}</strong></span>
+                {trade.entryType && (
+                  <>
+                    <span>·</span>
+                    <span>Entry: <strong className="text-slate-300">{trade.entryType}</strong></span>
+                  </>
+                )}
                 <span>·</span>
                 <span>MTF: {trade.mtf}</span>
                 <span>·</span>

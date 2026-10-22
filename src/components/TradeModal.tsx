@@ -15,6 +15,9 @@ import {
 import { 
   Trade, 
   TradeType, 
+  TradeDirection,
+  ScriptSource,
+  EntryType,
   RiskPercent, 
   SetupQuality, 
   TradeStatus, 
@@ -27,6 +30,8 @@ import {
   calculateCapitalRequired, 
   calculatePnL, 
   calculateROIPercent,
+  calculateProjectedTargetProfit,
+  calculateProjectedRisk,
   formatINR 
 } from '../utils/calculations';
 
@@ -40,8 +45,9 @@ interface TradeModalProps {
 }
 
 const ALL_TRADE_TYPES: TradeType[] = ['QIT', 'MIT', 'WIT', 'DIT', 'QT', 'TBS'];
+const ALL_SCRIPT_SOURCES: ScriptSource[] = ['HTF Running - I', 'HTF Running - II', 'Other'];
+const ALL_ENTRY_TYPES: EntryType[] = ['Direct', 'TBS', 'PA'];
 const ALL_RISK_PERCENTS: RiskPercent[] = ['0.5%', '1%', '2%', '3%'];
-const ALL_SETUP_QUALITIES: SetupQuality[] = ['A+', 'A', 'B', 'C'];
 const ALL_STATUSES: TradeStatus[] = ['Pending', 'Active', 'Close'];
 const ALL_EMOTIONS: EmotionType[] = [
   'Fomo',
@@ -81,7 +87,13 @@ export const TradeModal: React.FC<TradeModalProps> = ({
     tradeToEdit ? tradeToEdit.tradeDate : new Date().toISOString().split('T')[0]
   );
   const [script, setScript] = useState<string>(tradeToEdit ? tradeToEdit.script : '');
+  const [tradeDirection, setTradeDirection] = useState<TradeDirection>(
+    tradeToEdit ? (tradeToEdit.tradeDirection || 'Long') : 'Long'
+  );
   const [tradeType, setTradeType] = useState<TradeType>(tradeToEdit ? tradeToEdit.tradeType : 'DIT');
+  const [entryType, setEntryType] = useState<EntryType>(
+    tradeToEdit ? (tradeToEdit.entryType || 'Direct') : 'Direct'
+  );
   const [riskPerTrade, setRiskPerTrade] = useState<RiskPercent>(tradeToEdit ? tradeToEdit.riskPerTrade : '1%');
   const [mtf, setMtf] = useState<YesNo>(tradeToEdit ? tradeToEdit.mtf : 'Yes');
   
@@ -89,7 +101,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
     tradeToEdit ? tradeToEdit.entryPrice.toString() : ''
   );
   const [actualEntryPrice, setActualEntryPrice] = useState<string>(
-    tradeToEdit ? tradeToEdit.actualEntryPrice.toString() : ''
+    tradeToEdit && tradeToEdit.actualEntryPrice > 0 ? tradeToEdit.actualEntryPrice.toString() : ''
   );
   const [stopLoss, setStopLoss] = useState<string>(
     tradeToEdit ? tradeToEdit.stopLoss.toString() : ''
@@ -99,7 +111,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
   );
 
   const [actualQuantity, setActualQuantity] = useState<string>(
-    tradeToEdit ? tradeToEdit.actualQuantity.toString() : ''
+    tradeToEdit && tradeToEdit.actualQuantity > 0 ? tradeToEdit.actualQuantity.toString() : ''
   );
 
   const [exitPrice, setExitPrice] = useState<string>(
@@ -109,9 +121,13 @@ export const TradeModal: React.FC<TradeModalProps> = ({
     tradeToEdit ? tradeToEdit.exitDate : ''
   );
 
-  const [setupQuality, setSetupQuality] = useState<SetupQuality>(
-    tradeToEdit ? tradeToEdit.setupQuality : 'A'
-  );
+  const [scriptSource, setScriptSource] = useState<ScriptSource>(() => {
+    if (tradeToEdit?.scriptSource) return tradeToEdit.scriptSource;
+    if (tradeToEdit?.setupQuality === 'A+' || tradeToEdit?.setupQuality === 'A') return 'HTF Running - I';
+    if (tradeToEdit?.setupQuality === 'B') return 'HTF Running - II';
+    if (tradeToEdit?.setupQuality === 'C') return 'Other';
+    return 'HTF Running - I';
+  });
   const [status, setStatus] = useState<TradeStatus>(
     tradeToEdit ? tradeToEdit.status : 'Pending'
   );
@@ -127,10 +143,13 @@ export const TradeModal: React.FC<TradeModalProps> = ({
   const [chartBefore, setChartBefore] = useState<string>(tradeToEdit ? tradeToEdit.chartBefore : '');
   const [chartAfter, setChartAfter] = useState<string>(tradeToEdit ? tradeToEdit.chartAfter : '');
 
-  // Real-time calculated values
+  // Real-time parsed values
   const numEntry = parseFloat(entryPrice) || 0;
   const numStopLoss = parseFloat(stopLoss) || 0;
-  const numActualEntry = parseFloat(actualEntryPrice) || numEntry;
+  const numTarget = parseFloat(target) || 0;
+  const numActualEntry = actualEntryPrice.trim() !== '' 
+    ? parseFloat(actualEntryPrice) || 0 
+    : (status === 'Pending' ? 0 : numEntry);
   const numExit = exitPrice !== '' ? parseFloat(exitPrice) : null;
 
   // Auto-calculated Quantity based on Risk % & Total Capital
@@ -147,22 +166,31 @@ export const TradeModal: React.FC<TradeModalProps> = ({
   // Actual quantity used for PnL
   const effectiveActualQty = parseFloat(actualQuantity) || calculatedQuantity || 1;
 
-  // Live PnL in Rupee
-  const livePnL = calculatePnL(numExit, numActualEntry, effectiveActualQty);
-  const liveROI = calculateROIPercent(numExit, numActualEntry);
+  // Directional Projected Unit Gain & Stop Loss Distance
+  // Long: Gain = Target - Entry, Risk = Entry - SL
+  // Short: Gain = Entry - Target, Risk = SL - Entry
+  const projectedProfitPerUnit = calculateProjectedTargetProfit(numEntry, numTarget, tradeDirection);
+  const projectedRiskPerUnit = calculateProjectedRisk(numEntry, numStopLoss, tradeDirection);
+  const projectedTotalProfit = projectedProfitPerUnit * (calculatedQuantity || 1);
+  const projectedTotalRisk = Math.abs(projectedRiskPerUnit) * (calculatedQuantity || 1);
+  const riskRewardRatio = Math.abs(projectedRiskPerUnit) > 0 ? (projectedProfitPerUnit / Math.abs(projectedRiskPerUnit)) : 0;
 
-  // Auto-fill actual entry price and actual qty if empty when typing entry price
+  // Live PnL in Rupee (respecting Long / Short direction)
+  const livePnL = calculatePnL(numExit, numActualEntry, effectiveActualQty, tradeDirection);
+  const liveROI = calculateROIPercent(numExit, numActualEntry, tradeDirection);
+
+  // Auto-fill actual entry price and actual qty if empty when typing entry price (ONLY if NOT pending)
   useEffect(() => {
-    if (!tradeToEdit && actualEntryPrice === '' && entryPrice !== '') {
+    if (!tradeToEdit && status !== 'Pending' && actualEntryPrice === '' && entryPrice !== '') {
       setActualEntryPrice(entryPrice);
     }
-  }, [entryPrice]);
+  }, [entryPrice, status]);
 
   useEffect(() => {
-    if (!tradeToEdit && actualQuantity === '' && calculatedQuantity > 0) {
+    if (!tradeToEdit && actualQuantity === '' && calculatedQuantity > 0 && status !== 'Pending') {
       setActualQuantity(calculatedQuantity.toString());
     }
-  }, [calculatedQuantity]);
+  }, [calculatedQuantity, status]);
 
   // Handle file uploads
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, isBefore: boolean) => {
@@ -219,26 +247,43 @@ export const TradeModal: React.FC<TradeModalProps> = ({
       setFormError('Please enter a valid Stop Loss greater than 0.');
       return;
     }
+    
+    // IMPORTANT: When status is Pending, Actual Entry Price is NOT required!
+    if (status !== 'Pending' && actualEntryPrice.trim() !== '' && parseFloat(actualEntryPrice) <= 0) {
+      setFormError('Please enter a valid Actual Entry Price greater than 0.');
+      return;
+    }
     setFormError(null);
+
+    const finalActualEntry = actualEntryPrice.trim() !== ''
+      ? (parseFloat(actualEntryPrice) || 0)
+      : (status === 'Pending' ? 0 : numEntry);
+
+    const finalActualQty = actualQuantity.trim() !== ''
+      ? (parseFloat(actualQuantity) || 0)
+      : (status === 'Pending' ? 0 : calculatedQuantity);
 
     const trade: Trade = {
       id: tradeToEdit ? tradeToEdit.id : `trade-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       serialNumber: serialNumber || nextSerialNumber,
       tradeDate,
       script: script.trim().toUpperCase(),
+      tradeDirection,
       tradeType,
+      entryType,
       riskPerTrade,
       mtf,
       entryPrice: numEntry,
-      actualEntryPrice: numActualEntry,
+      actualEntryPrice: finalActualEntry,
       stopLoss: numStopLoss,
       target: parseFloat(target) || 0,
       quantity: calculatedQuantity,
       capitalRequired: calculatedCapitalRequired,
-      actualQuantity: effectiveActualQty,
+      actualQuantity: finalActualQty,
       exitPrice: numExit,
       exitDate: exitDate || (status === 'Close' ? tradeDate : ''),
-      setupQuality,
+      scriptSource,
+      setupQuality: scriptSource,
       chartBefore,
       chartAfter,
       status,
@@ -309,7 +354,7 @@ export const TradeModal: React.FC<TradeModalProps> = ({
             <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400 font-mono block mb-3">
               01. Setup & Identification
             </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3.5">
               
               {/* Serial Number */}
               <div>
@@ -323,6 +368,42 @@ export const TradeModal: React.FC<TradeModalProps> = ({
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-md text-xs text-white font-mono focus:outline-hidden focus:border-slate-600"
                   required
                 />
+              </div>
+
+              {/* Trade Direction (Long / Short) */}
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Trade Direction
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setTradeDirection('Long')}
+                    className={`py-2 px-2 text-xs font-bold rounded-md border flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                      tradeDirection === 'Long'
+                        ? 'bg-emerald-950/70 text-emerald-300 border-emerald-500 shadow-xs'
+                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                    }`}
+                  >
+                    <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Long</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTradeDirection('Short')}
+                    className={`py-2 px-2 text-xs font-bold rounded-md border flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                      tradeDirection === 'Short'
+                        ? 'bg-rose-950/70 text-rose-300 border-rose-500 shadow-xs'
+                        : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                    }`}
+                  >
+                    <TrendingDown className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Short</span>
+                  </button>
+                </div>
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  {tradeDirection === 'Long' ? 'Bullish (Buy Setup)' : 'Bearish (Sell Setup)'}
+                </span>
               </div>
 
               {/* Trade Analysis Date with Choose Option (Date, Month, Year) */}
@@ -366,12 +447,12 @@ export const TradeModal: React.FC<TradeModalProps> = ({
             </div>
           </div>
 
-          {/* Section 2: Strategy, Risk & MTF */}
+          {/* Section 2: Strategy, Risk Sizing & Confluence */}
           <div>
             <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400 font-mono block mb-3">
               02. Strategy, Risk Sizing & Confluence
             </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3.5">
               
               {/* Trade Type */}
               <div>
@@ -389,6 +470,32 @@ export const TradeModal: React.FC<TradeModalProps> = ({
                 </select>
                 <span className="text-[10px] text-slate-500 mt-1 block">
                   QIT, MIT, WIT, DIT, QT, TBS
+                </span>
+              </div>
+
+              {/* Entry Type (Direct, TBS, PA) */}
+              <div>
+                <label className="block text-xs font-medium text-slate-300 mb-1">
+                  Entry Type
+                </label>
+                <div className="grid grid-cols-3 gap-1">
+                  {ALL_ENTRY_TYPES.map(eType => (
+                    <button
+                      key={eType}
+                      type="button"
+                      onClick={() => setEntryType(eType)}
+                      className={`py-2 text-xs font-semibold rounded border transition-colors cursor-pointer ${
+                        entryType === eType
+                          ? 'bg-sky-500 text-slate-950 font-bold border-sky-400'
+                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
+                      }`}
+                    >
+                      {eType}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Direct, TBS, PA
                 </span>
               </div>
 
@@ -442,27 +549,31 @@ export const TradeModal: React.FC<TradeModalProps> = ({
                 </div>
               </div>
 
-              {/* Setup Quality */}
+              {/* Script Source (HTF Running - I, HTF Running - II, Other) */}
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Setup Quality
+                  Script Source
                 </label>
-                <div className="grid grid-cols-4 gap-1">
-                  {ALL_SETUP_QUALITIES.map(q => (
+                <div className="grid grid-cols-3 gap-1">
+                  {ALL_SCRIPT_SOURCES.map(source => (
                     <button
-                      key={q}
+                      key={source}
                       type="button"
-                      onClick={() => setSetupQuality(q)}
-                      className={`py-2 text-xs font-bold rounded border transition-colors ${
-                        setupQuality === q
+                      onClick={() => setScriptSource(source)}
+                      className={`py-2 px-1 text-[10px] font-bold rounded border transition-colors truncate cursor-pointer ${
+                        scriptSource === source
                           ? 'bg-emerald-500 text-slate-950 border-emerald-400'
                           : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-slate-200'
                       }`}
+                      title={source}
                     >
-                      {q}
+                      {source === 'HTF Running - I' ? 'HTF-I' : source === 'HTF Running - II' ? 'HTF-II' : 'Other'}
                     </button>
                   ))}
                 </div>
+                <span className="text-[10px] text-emerald-400/90 font-mono mt-1 block truncate">
+                  {scriptSource}
+                </span>
               </div>
 
             </div>
@@ -491,19 +602,28 @@ export const TradeModal: React.FC<TradeModalProps> = ({
                 />
               </div>
 
-              {/* Actual Entry Price */}
+              {/* Actual Entry Price (NOT REQUIRED WHEN STATUS IS PENDING) */}
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">
-                  Actual Entry Price (₹)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-medium text-slate-300">
+                    Actual Entry Price (₹)
+                  </label>
+                  {status === 'Pending' && (
+                    <span className="text-[10px] text-amber-400 font-mono font-medium">Optional (Pending)</span>
+                  )}
+                </div>
                 <input
                   type="number"
                   step="any"
-                  placeholder="e.g. 146.50"
+                  placeholder={status === 'Pending' ? 'Leave blank while pending' : 'e.g. 146.50'}
                   value={actualEntryPrice}
                   onChange={(e) => setActualEntryPrice(e.target.value)}
-                  className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-md text-xs text-white font-mono focus:outline-hidden focus:border-slate-600"
-                  required
+                  className={`w-full px-3 py-2 bg-slate-950 border rounded-md text-xs text-white font-mono focus:outline-hidden ${
+                    status === 'Pending' 
+                      ? 'border-amber-500/40 text-slate-300 placeholder-slate-600 focus:border-amber-400' 
+                      : 'border-slate-800 focus:border-slate-600'
+                  }`}
+                  required={status !== 'Pending'}
                 />
               </div>
 
@@ -541,13 +661,13 @@ export const TradeModal: React.FC<TradeModalProps> = ({
 
             </div>
 
-            {/* Auto-Calculated Output Ribbon */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 mt-3 rounded-lg bg-slate-900/90 border border-slate-800">
+            {/* Auto-Calculated Output Ribbon with Directional Profit / Loss Projection */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 p-3.5 mt-3 rounded-lg bg-slate-900/90 border border-slate-800">
               
               {/* Calculated Quantity */}
               <div>
                 <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                  <span>Calculated Quantity (Formula)</span>
+                  <span>Calculated Quantity</span>
                   <span className="text-[10px] text-emerald-400 font-mono">Risk% / |Entry-SL|</span>
                 </div>
                 <div className="text-lg font-bold font-mono text-emerald-400 tabular-nums">
@@ -572,6 +692,40 @@ export const TradeModal: React.FC<TradeModalProps> = ({
                 </p>
               </div>
 
+              {/* Directional Profit & Loss Projection (Target & Stop Loss per unit) */}
+              <div className="p-2 rounded bg-slate-950/80 border border-slate-800/80">
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="text-slate-400 font-medium">
+                    {tradeDirection === 'Long' ? 'Long Setup Expectancy' : 'Short Setup Expectancy'}
+                  </span>
+                  <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded font-mono ${
+                    tradeDirection === 'Long' ? 'bg-emerald-950 text-emerald-400' : 'bg-rose-950 text-rose-400'
+                  }`}>
+                    {tradeDirection.toUpperCase()}
+                  </span>
+                </div>
+                <div className="text-[11px] font-mono space-y-0.5">
+                  <div className="flex items-center justify-between text-emerald-400">
+                    <span>Target Profit:</span>
+                    <span className="font-bold">
+                      {projectedProfitPerUnit >= 0 ? '+' : ''}₹{projectedProfitPerUnit.toFixed(2)}/unit
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-rose-400">
+                    <span>Stop Loss Risk:</span>
+                    <span className="font-bold">
+                      -₹{Math.abs(projectedRiskPerUnit).toFixed(2)}/unit
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-400 text-[10px] pt-1 border-t border-slate-800">
+                    <span>R:R Ratio:</span>
+                    <span className="font-bold text-sky-400">
+                      1 : {riskRewardRatio > 0 ? riskRewardRatio.toFixed(2) : '0.00'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
               {/* Actual Quantity Field */}
               <div>
                 <label className="block text-xs text-slate-300 mb-1 font-medium">
@@ -581,9 +735,12 @@ export const TradeModal: React.FC<TradeModalProps> = ({
                   type="number"
                   value={actualQuantity}
                   onChange={(e) => setActualQuantity(e.target.value)}
-                  placeholder={calculatedQuantity.toString()}
+                  placeholder={status === 'Pending' ? 'Pending' : calculatedQuantity.toString()}
                   className="w-full px-2.5 py-1.5 bg-slate-950 border border-slate-700 rounded text-xs text-white font-mono font-bold focus:outline-hidden focus:border-emerald-500"
                 />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  {status === 'Pending' ? 'Can be left empty for Pending' : 'Defaults to calculated quantity'}
+                </span>
               </div>
 
             </div>

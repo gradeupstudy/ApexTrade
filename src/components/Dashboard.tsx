@@ -22,7 +22,7 @@ import {
   calculateAnalyticsSummary, 
   calculateEmotionAnalytics, 
   calculateStrategyAnalytics,
-  calculateQualityAnalytics,
+  calculateScriptSourceAnalytics,
   calculateEquityCurve,
   formatINR,
   formatINRCompact
@@ -46,7 +46,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const summary = calculateAnalyticsSummary(trades);
   const emotionStats = calculateEmotionAnalytics(trades);
   const strategyStats = calculateStrategyAnalytics(trades);
-  const qualityStats = calculateQualityAnalytics(trades);
+  const sourceStats = calculateScriptSourceAnalytics(trades);
   const equityPoints = calculateEquityCurve(trades, metrics.totalCapital);
 
   const [hoveredPoint, setHoveredPoint] = useState<number | null>(null);
@@ -454,30 +454,31 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </div>
             </div>
 
-            {/* Setup Quality Breakdown (A+, A, B, C) */}
+            {/* Script Source Breakdown (HTF Running - I, HTF Running - II, Other) */}
             <div>
               <span className="text-[11px] uppercase tracking-wider text-slate-400 font-mono block mb-2 font-medium">
-                Setup Quality Win Rate (A+, A, B, C)
+                Script Source Win Rate (HTF Running - I, HTF Running - II, Other)
               </span>
               <div className="space-y-2">
-                {qualityStats.map(q => (
-                  <div key={q.quality} className="flex items-center justify-between text-xs">
-                    <span className="w-8 font-bold text-slate-300 font-mono">{q.quality}</span>
+                {sourceStats.map(s => (
+                  <div key={s.source} className="flex items-center justify-between text-xs">
+                    <span className="w-28 font-bold text-slate-300 font-mono text-[11px] truncate" title={s.source}>
+                      {s.source === 'HTF Running - I' ? 'HTF Run-I' : s.source === 'HTF Running - II' ? 'HTF Run-II' : 'Other'}
+                    </span>
                     <div className="flex-1 mx-3 bg-slate-900 rounded-full h-2 overflow-hidden">
                       <div 
                         className={`h-full rounded-full ${
-                          q.quality === 'A+' ? 'bg-emerald-400' :
-                          q.quality === 'A' ? 'bg-sky-400' :
-                          q.quality === 'B' ? 'bg-amber-400' : 'bg-rose-400'
+                          s.source === 'HTF Running - I' ? 'bg-emerald-400' :
+                          s.source === 'HTF Running - II' ? 'bg-sky-400' : 'bg-amber-400'
                         }`}
-                        style={{ width: `${q.winRate}%` }}
+                        style={{ width: `${s.winRate}%` }}
                       ></div>
                     </div>
-                    <span className="font-mono text-slate-300 w-12 text-right">{q.winRate}%</span>
+                    <span className="font-mono text-slate-300 w-12 text-right">{s.winRate}%</span>
                     <span className={`font-mono w-20 text-right font-semibold ${
-                      q.netPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                      s.netPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'
                     }`}>
-                      {formatINRCompact(q.netPnL)}
+                      {formatINRCompact(s.netPnL)}
                     </span>
                   </div>
                 ))}
@@ -486,7 +487,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
 
           <div className="pt-3 mt-4 border-t border-slate-800/80 text-[11px] text-slate-500 flex items-center justify-between">
-            <span>A+ & A setups consistently produce high risk:reward expectancy.</span>
+            <span>HTF Running - I & II setups capture institutional momentum.</span>
             <span className="font-mono text-slate-400">{summary.closedTrades} Trades</span>
           </div>
         </div>

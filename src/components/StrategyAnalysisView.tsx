@@ -14,10 +14,11 @@ import {
   Globe,
   Compass
 } from 'lucide-react';
-import { Trade, TradeType, SetupQuality, YesNo, RiskPercent } from '../types/trade';
+import { Trade, TradeType, ScriptSource, EntryType, YesNo, RiskPercent } from '../types/trade';
 import { 
   calculateStrategyAnalytics, 
-  calculateQualityAnalytics, 
+  calculateScriptSourceAnalytics, 
+  calculateEntryTypeAnalytics,
   formatINR, 
   formatINRCompact 
 } from '../utils/calculations';
@@ -42,7 +43,8 @@ interface GeographicZoneMetric {
 export const StrategyAnalysisView: React.FC<StrategyAnalysisViewProps> = ({ trades }) => {
   const closedTrades = trades.filter(t => t.status === 'Close');
   const strategyStats = calculateStrategyAnalytics(trades);
-  const qualityStats = calculateQualityAnalytics(trades);
+  const sourceStats = calculateScriptSourceAnalytics(trades);
+  const entryTypeStats = calculateEntryTypeAnalytics(trades);
 
   const [selectedZone, setSelectedZone] = useState<string>('Western Hub');
 
@@ -451,53 +453,75 @@ export const StrategyAnalysisView: React.FC<StrategyAnalysisViewProps> = ({ trad
         </div>
       </div>
 
-      {/* Two Column Grid: MTF & Rule Adherence vs Setup Quality & Script Ranking */}
+      {/* Two Column Grid: Script Source & Entry Type vs Script Ranking */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* Setup Quality Performance (A+, A, B, C) */}
-        <div className="p-5 rounded-xl bg-[#0f172a] border border-slate-800">
-          <h3 className="text-sm font-semibold text-slate-100 mb-3 flex items-center gap-2">
-            <Award className="w-4 h-4 text-emerald-400" />
-            Setup Quality Hierarchy (A+, A, B, C)
-          </h3>
-          <p className="text-xs text-slate-400 mb-4">
-            Measure how setup discipline impacts your P&L. Low quality 'C' trades often drag account returns.
-          </p>
+        {/* Script Source Performance (HTF Running - I, HTF Running - II, Other) */}
+        <div className="p-5 rounded-xl bg-[#0f172a] border border-slate-800 space-y-6">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-100 mb-2 flex items-center gap-2">
+              <Award className="w-4 h-4 text-emerald-400" />
+              Script Source Analysis (HTF Running - I, HTF Running - II, Other)
+            </h3>
+            <p className="text-xs text-slate-400 mb-4">
+              Analyze trade performance segregated by institutional HTF sources vs discretionary setups.
+            </p>
 
-          <div className="space-y-3">
-            {qualityStats.map(q => (
-              <div key={q.quality} className="p-3 rounded-lg bg-slate-900/60 border border-slate-800">
-                <div className="flex items-center justify-between text-xs mb-1.5 font-mono">
-                  <div className="flex items-center gap-2">
-                    <span className={`font-bold text-sm ${
-                      q.quality === 'A+' ? 'text-emerald-400' :
-                      q.quality === 'A' ? 'text-sky-400' :
-                      q.quality === 'B' ? 'text-amber-400' : 'text-rose-400'
-                    }`}>
-                      {q.quality} Setup
-                    </span>
-                    <span className="text-slate-500">({q.tradeCount} trades)</span>
+            <div className="space-y-3">
+              {sourceStats.map(s => (
+                <div key={s.source} className="p-3 rounded-lg bg-slate-900/60 border border-slate-800">
+                  <div className="flex items-center justify-between text-xs mb-1.5 font-mono">
+                    <div className="flex items-center gap-2">
+                      <span className={`font-bold text-sm ${
+                        s.source === 'HTF Running - I' ? 'text-emerald-400' :
+                        s.source === 'HTF Running - II' ? 'text-sky-400' : 'text-amber-400'
+                      }`}>
+                        {s.source}
+                      </span>
+                      <span className="text-slate-500">({s.tradeCount} trades)</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-slate-300">{s.winRate}% Win</span>
+                      <span className={`font-bold ${s.netPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {s.netPnL >= 0 ? '+' : ''}{formatINR(s.netPnL)}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-slate-300">{q.winRate}% Win</span>
-                    <span className={`font-bold ${q.netPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {q.netPnL >= 0 ? '+' : ''}{formatINR(q.netPnL)}
-                    </span>
+
+                  <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full ${
+                        s.source === 'HTF Running - I' ? 'bg-emerald-500' :
+                        s.source === 'HTF Running - II' ? 'bg-sky-500' : 'bg-amber-500'
+                      }`}
+                      style={{ width: `${s.winRate}%` }}
+                    ></div>
                   </div>
                 </div>
+              ))}
+            </div>
+          </div>
 
-                <div className="w-full bg-slate-950 rounded-full h-2 overflow-hidden">
-                  <div 
-                    className={`h-full rounded-full ${
-                      q.quality === 'A+' ? 'bg-emerald-500' :
-                      q.quality === 'A' ? 'bg-sky-500' :
-                      q.quality === 'B' ? 'bg-amber-500' : 'bg-rose-500'
-                    }`}
-                    style={{ width: `${q.winRate}%` }}
-                  ></div>
+          {/* Entry Type Performance (Direct, TBS, PA) */}
+          <div className="pt-4 border-t border-slate-800/80">
+            <h4 className="text-xs font-semibold text-slate-200 mb-2 font-mono uppercase tracking-wider flex items-center gap-2">
+              <Zap className="w-3.5 h-3.5 text-sky-400" />
+              Entry Type Performance (Direct, TBS, PA)
+            </h4>
+            <div className="grid grid-cols-3 gap-2">
+              {entryTypeStats.map(e => (
+                <div key={e.entryType} className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800 text-center">
+                  <span className="text-xs font-bold text-white font-mono block">{e.entryType}</span>
+                  <span className="text-[11px] font-mono text-slate-400 block mt-0.5">{e.winRate}% Win</span>
+                  <span className="text-[10px] text-slate-500 block">{e.tradeCount} trades</span>
+                  <span className={`text-[11px] font-mono font-bold block mt-1 ${
+                    e.netPnL >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                  }`}>
+                    {e.netPnL >= 0 ? '+' : ''}{formatINRCompact(e.netPnL)}
+                  </span>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
 
