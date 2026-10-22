@@ -85,10 +85,8 @@ export default function App() {
   }, [trades, totalCapital]);
 
   const nextSerialNumber = useMemo(() => {
-    if (trades.length === 0) return 1;
-    const maxSerial = Math.max(...trades.map(t => t.serialNumber || 0));
-    return maxSerial + 1;
-  }, [trades]);
+    return trades.length + 1;
+  }, [trades.length]);
 
   // Handlers
   const handleOpenNewTrade = () => {
@@ -113,18 +111,34 @@ export default function App() {
         copy[existsIndex] = savedTrade;
         return copy;
       } else {
-        return [...prevTrades, savedTrade];
+        const newTradeWithSerial: Trade = {
+          ...savedTrade,
+          serialNumber: prevTrades.length + 1
+        };
+        return [...prevTrades, newTradeWithSerial];
       }
     });
   };
 
   const handleDeleteTrade = (id: string) => {
-    setTrades(prev => prev.filter(t => t.id !== id));
+    setTrades(prev => {
+      const filtered = prev.filter(t => t.id !== id);
+      return filtered.map((t, idx) => ({
+        ...t,
+        serialNumber: idx + 1
+      }));
+    });
   };
 
   const handleDeleteMultipleTrades = (ids: string[]) => {
     const idSet = new Set(ids);
-    setTrades(prev => prev.filter(t => !idSet.has(t.id)));
+    setTrades(prev => {
+      const filtered = prev.filter(t => !idSet.has(t.id));
+      return filtered.map((t, idx) => ({
+        ...t,
+        serialNumber: idx + 1
+      }));
+    });
   };
 
   const handleDuplicateTrade = (trade: Trade) => {

@@ -553,3 +553,284 @@ export function calculateEquityCurve(trades: Trade[], startingCapital: number): 
 
   return points;
 }
+
+export interface MTFStockMetric {
+  script: string;
+  tradeCount: number;
+  winCount: number;
+  winRate: number;
+  netPnL: number;
+  capitalDeployed: number;
+  avgReturnPercent: number;
+  lastTradeDate: string;
+}
+
+export interface MTFAnalytics {
+  yesTradesCount: number;
+  yesClosedCount: number;
+  yesWins: number;
+  yesWinRate: number;
+  yesNetPnL: number;
+  yesGrossProfit: number;
+  yesGrossLoss: number;
+  yesProfitFactor: number;
+  yesCapitalDeployed: number;
+  noTradesCount: number;
+  noClosedCount: number;
+  noWins: number;
+  noWinRate: number;
+  noNetPnL: number;
+  noProfitFactor: number;
+  noCapitalDeployed: number;
+  mtfStocks: MTFStockMetric[];
+}
+
+export function calculateMTFAnalytics(trades: Trade[]): MTFAnalytics {
+  const mtfYesAll = trades.filter(t => t.mtf === 'Yes');
+  const mtfNoAll = trades.filter(t => t.mtf === 'No');
+
+  const mtfYesClosed = mtfYesAll.filter(t => t.status === 'Close');
+  const mtfNoClosed = mtfNoAll.filter(t => t.status === 'Close');
+
+  let yesWins = 0;
+  let yesGrossProfit = 0;
+  let yesGrossLoss = 0;
+  let yesNetPnL = 0;
+  let yesCapitalDeployed = 0;
+
+  for (const t of mtfYesClosed) {
+    const pnl = t.pnlRupee || 0;
+    yesNetPnL += pnl;
+    if (pnl > 0) {
+      yesWins++;
+      yesGrossProfit += pnl;
+    } else {
+      yesGrossLoss += Math.abs(pnl);
+    }
+  }
+
+  for (const t of mtfYesAll) {
+    yesCapitalDeployed += t.capitalRequired || 0;
+  }
+
+  const yesTradesCount = mtfYesAll.length;
+  const yesClosedCount = mtfYesClosed.length;
+  const yesWinRate = yesClosedCount > 0 ? (yesWins / yesClosedCount) * 100 : 0;
+  const yesProfitFactor = yesGrossLoss > 0 ? (yesGrossProfit / yesGrossLoss) : (yesGrossProfit > 0 ? 99.9 : 1.0);
+
+  let noWins = 0;
+  let noGrossProfit = 0;
+  let noGrossLoss = 0;
+  let noNetPnL = 0;
+  let noCapitalDeployed = 0;
+
+  for (const t of mtfNoClosed) {
+    const pnl = t.pnlRupee || 0;
+    noNetPnL += pnl;
+    if (pnl > 0) {
+      noWins++;
+      noGrossProfit += pnl;
+    } else {
+      noGrossLoss += Math.abs(pnl);
+    }
+  }
+
+  for (const t of mtfNoAll) {
+    noCapitalDeployed += t.capitalRequired || 0;
+  }
+
+  const noTradesCount = mtfNoAll.length;
+  const noClosedCount = mtfNoClosed.length;
+  const noWinRate = noClosedCount > 0 ? (noWins / noClosedCount) * 100 : 0;
+  const noProfitFactor = noGrossLoss > 0 ? (noGrossProfit / noGrossLoss) : (noGrossProfit > 0 ? 99.9 : 1.0);
+
+  // Group stocks marked MTF === 'Yes'
+  const stockMap = new Map<string, {
+    tradeCount: number;
+    winCount: number;
+    netPnL: number;
+    capitalDeployed: number;
+    roiSum: number;
+    lastTradeDate: string;
+  }>();
+
+  for (const t of mtfYesAll) {
+    const existing = stockMap.get(t.script) || {
+      tradeCount: 0,
+      winCount: 0,
+      netPnL: 0,
+      capitalDeployed: 0,
+      roiSum: 0,
+      lastTradeDate: t.tradeDate
+    };
+    existing.tradeCount++;
+    existing.capitalDeployed += t.capitalRequired || 0;
+    if (t.status === 'Close') {
+      const pnl = t.pnlRupee || 0;
+      existing.netPnL += pnl;
+      if (pnl > 0) existing.winCount++;
+      existing.roiSum += t.roiPercent || 0;
+    }
+    if (t.tradeDate > existing.lastTradeDate) {
+      existing.lastTradeDate = t.tradeDate;
+    }
+    stockMap.set(t.script, existing);
+  }
+
+  const mtfStocks: MTFStockMetric[] = Array.from(stockMap.entries()).map(([script, data]) => ({
+    script,
+    tradeCount: data.tradeCount,
+    winCount: data.winCount,
+    winRate: data.tradeCount > 0 ? Math.round((data.winCount / data.tradeCount) * 100) : 0,
+    netPnL: Math.round(data.netPnL),
+    capitalDeployed: Math.round(data.capitalDeployed),
+    avgReturnPercent: data.tradeCount > 0 ? Math.round((data.roiSum / data.tradeCount) * 10) / 10 : 0,
+    lastTradeDate: data.lastTradeDate
+  })).sort((a, b) => b.netPnL - a.netPnL);
+
+  return {
+    yesTradesCount,
+    yesClosedCount,
+    yesWins,
+    yesWinRate: Math.round(yesWinRate * 10) / 10,
+    yesNetPnL: Math.round(yesNetPnL),
+    yesGrossProfit: Math.round(yesGrossProfit),
+    yesGrossLoss: Math.round(yesGrossLoss),
+    yesProfitFactor: Math.round(yesProfitFactor * 100) / 100,
+    yesCapitalDeployed: Math.round(yesCapitalDeployed),
+    noTradesCount,
+    noClosedCount,
+    noWins,
+    noWinRate: Math.round(noWinRate * 10) / 10,
+    noNetPnL: Math.round(noNetPnL),
+    noProfitFactor: Math.round(noProfitFactor * 100) / 100,
+    noCapitalDeployed: Math.round(noCapitalDeployed),
+    mtfStocks
+  };
+}
+
+export interface TimeCyclePoint {
+  periodLabel: string;
+  sortKey: string;
+  tradeCount: number;
+  winCount: number;
+  winRate: number;
+  netPnL: number;
+  grossProfit: number;
+  grossLoss: number;
+  cumulativePnL: number;
+}
+
+export interface TimeCycleData {
+  weekly: TimeCyclePoint[];
+  monthly: TimeCyclePoint[];
+  yearly: TimeCyclePoint[];
+}
+
+function getWeekNumber(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return 'W00';
+  const target = new Date(d.valueOf());
+  const dayNr = (d.getDay() + 6) % 7;
+  target.setDate(target.getDate() - dayNr + 3);
+  const firstThursday = target.valueOf();
+  target.setMonth(0, 1);
+  if (target.getDay() !== 4) {
+    target.setMonth(0, 1 + ((4 - target.getDay()) + 7) % 7);
+  }
+  const weekNum = 1 + Math.ceil((firstThursday - target.valueOf()) / 604800000);
+  return `${d.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+}
+
+export function calculateTimeCycleAnalytics(trades: Trade[]): TimeCycleData {
+  const closedTrades = trades
+    .filter(t => t.status === 'Close')
+    .sort((a, b) => {
+      const dateA = a.exitDate || a.tradeDate;
+      const dateB = b.exitDate || b.tradeDate;
+      return dateA.localeCompare(dateB);
+    });
+
+  // Group helpers
+  const groupWeekly = new Map<string, { trades: number; wins: number; pnl: number; grossProfit: number; grossLoss: number }>();
+  const groupMonthly = new Map<string, { trades: number; wins: number; pnl: number; grossProfit: number; grossLoss: number }>();
+  const groupYearly = new Map<string, { trades: number; wins: number; pnl: number; grossProfit: number; grossLoss: number }>();
+
+  for (const t of closedTrades) {
+    const rawDate = t.exitDate || t.tradeDate || '2026-01-01';
+    const weekKey = getWeekNumber(rawDate);
+    const monthKey = rawDate.slice(0, 7); // YYYY-MM
+    const yearKey = rawDate.slice(0, 4); // YYYY
+
+    const pnl = t.pnlRupee || 0;
+    const isWin = pnl > 0;
+    const gProf = isWin ? pnl : 0;
+    const gLoss = !isWin ? Math.abs(pnl) : 0;
+
+    // Weekly
+    const w = groupWeekly.get(weekKey) || { trades: 0, wins: 0, pnl: 0, grossProfit: 0, grossLoss: 0 };
+    w.trades++;
+    w.pnl += pnl;
+    w.grossProfit += gProf;
+    w.grossLoss += gLoss;
+    if (isWin) w.wins++;
+    groupWeekly.set(weekKey, w);
+
+    // Monthly
+    const m = groupMonthly.get(monthKey) || { trades: 0, wins: 0, pnl: 0, grossProfit: 0, grossLoss: 0 };
+    m.trades++;
+    m.pnl += pnl;
+    m.grossProfit += gProf;
+    m.grossLoss += gLoss;
+    if (isWin) m.wins++;
+    groupMonthly.set(monthKey, m);
+
+    // Yearly
+    const y = groupYearly.get(yearKey) || { trades: 0, wins: 0, pnl: 0, grossProfit: 0, grossLoss: 0 };
+    y.trades++;
+    y.pnl += pnl;
+    y.grossProfit += gProf;
+    y.grossLoss += gLoss;
+    if (isWin) y.wins++;
+    groupYearly.set(yearKey, y);
+  }
+
+  // Convert map to cumulative points
+  const buildCyclePoints = (
+    map: Map<string, { trades: number; wins: number; pnl: number; grossProfit: number; grossLoss: number }>,
+    formatLabel: (key: string) => string
+  ): TimeCyclePoint[] => {
+    const sortedKeys = Array.from(map.keys()).sort();
+    let cumulative = 0;
+    return sortedKeys.map(key => {
+      const val = map.get(key)!;
+      cumulative += val.pnl;
+      return {
+        sortKey: key,
+        periodLabel: formatLabel(key),
+        tradeCount: val.trades,
+        winCount: val.wins,
+        winRate: val.trades > 0 ? Math.round((val.wins / val.trades) * 100) : 0,
+        netPnL: Math.round(val.pnl),
+        grossProfit: Math.round(val.grossProfit),
+        grossLoss: Math.round(val.grossLoss),
+        cumulativePnL: Math.round(cumulative)
+      };
+    });
+  };
+
+  const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  return {
+    weekly: buildCyclePoints(groupWeekly, k => {
+      const parts = k.split('-W');
+      return `W${parts[1]} '${parts[0]?.slice(2)}`;
+    }),
+    monthly: buildCyclePoints(groupMonthly, k => {
+      const [year, mStr] = k.split('-');
+      const mIdx = parseInt(mStr, 10) - 1;
+      return `${MONTH_NAMES[mIdx] || mStr} ${year}`;
+    }),
+    yearly: buildCyclePoints(groupYearly, k => `Year ${k}`)
+  };
+}

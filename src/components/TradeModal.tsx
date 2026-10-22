@@ -192,6 +192,60 @@ export const TradeModal: React.FC<TradeModalProps> = ({
     }
   }, [calculatedQuantity, status]);
 
+  // Synchronize and reset form state when modal opens or target trade changes
+  useEffect(() => {
+    if (isOpen) {
+      if (tradeToEdit) {
+        setSerialNumber(tradeToEdit.serialNumber);
+        setTradeDate(tradeToEdit.tradeDate || new Date().toISOString().split('T')[0]);
+        setScript(tradeToEdit.script || '');
+        setTradeDirection(tradeToEdit.tradeDirection || 'Long');
+        setTradeType(tradeToEdit.tradeType || 'DIT');
+        setEntryType(tradeToEdit.entryType || 'Direct');
+        setRiskPerTrade(tradeToEdit.riskPerTrade || '1%');
+        setMtf(tradeToEdit.mtf || 'Yes');
+        setEntryPrice(tradeToEdit.entryPrice ? tradeToEdit.entryPrice.toString() : '');
+        setActualEntryPrice(tradeToEdit.actualEntryPrice > 0 ? tradeToEdit.actualEntryPrice.toString() : '');
+        setStopLoss(tradeToEdit.stopLoss ? tradeToEdit.stopLoss.toString() : '');
+        setTarget(tradeToEdit.target ? tradeToEdit.target.toString() : '');
+        setActualQuantity(tradeToEdit.actualQuantity ? tradeToEdit.actualQuantity.toString() : '');
+        setExitPrice(tradeToEdit.exitPrice !== null && tradeToEdit.exitPrice !== undefined ? tradeToEdit.exitPrice.toString() : '');
+        setExitDate(tradeToEdit.exitDate || '');
+        setScriptSource(tradeToEdit.scriptSource || (tradeToEdit.setupQuality as any) || 'HTF Running - I');
+        setStatus(tradeToEdit.status || 'Pending');
+        setRuleFollowed(tradeToEdit.ruleFollowed || 'Yes');
+        setEmotions(tradeToEdit.emotions && tradeToEdit.emotions.length > 0 ? tradeToEdit.emotions : ['Calm']);
+        setNotes(tradeToEdit.notes || '');
+        setChartBefore(tradeToEdit.chartBefore || '');
+        setChartAfter(tradeToEdit.chartAfter || '');
+      } else {
+        setSerialNumber(nextSerialNumber);
+        setTradeDate(new Date().toISOString().split('T')[0]);
+        setScript('');
+        setTradeDirection('Long');
+        setTradeType('DIT');
+        setEntryType('Direct');
+        setRiskPerTrade('1%');
+        setMtf('Yes');
+        setEntryPrice('');
+        setActualEntryPrice('');
+        setStopLoss('');
+        setTarget('');
+        setActualQuantity('');
+        setExitPrice('');
+        setExitDate('');
+        setScriptSource('HTF Running - I');
+        setStatus('Pending');
+        setRuleFollowed('Yes');
+        setEmotions(['Calm']);
+        setNotes('');
+        setChartBefore('');
+        setChartAfter('');
+      }
+      setFormError(null);
+    }
+  }, [isOpen, tradeToEdit, nextSerialNumber]);
+
   // Handle file uploads
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, isBefore: boolean) => {
     const file = e.target.files?.[0];
@@ -518,10 +572,10 @@ export const TradeModal: React.FC<TradeModalProps> = ({
                 </span>
               </div>
 
-              {/* MTF (Multi-Time Frame) */}
+              {/* MTF (Margin Trading Facility) */}
               <div>
                 <label className="block text-xs font-medium text-slate-300 mb-1">
-                  MTF (Multi-Timeframe)
+                  MTF (Margin Trading Facility)
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button

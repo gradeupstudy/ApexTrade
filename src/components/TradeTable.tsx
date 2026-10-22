@@ -4,6 +4,7 @@ import {
   Filter, 
   ArrowUpDown, 
   Maximize2, 
+  Minimize2,
   Edit, 
   Trash2, 
   Copy, 
@@ -78,6 +79,17 @@ export const TradeTable: React.FC<TradeTableProps> = ({
   const [tradeToDelete, setTradeToDelete] = useState<Trade | null>(null);
   const [showBatchDeleteModal, setShowBatchDeleteModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isFullScreen) {
+        setIsFullScreen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isFullScreen]);
 
   const [sortField, setSortField] = useState<keyof Trade>('serialNumber');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -200,13 +212,24 @@ export const TradeTable: React.FC<TradeTableProps> = ({
   }, [trades, searchTerm, directionFilter, statusFilter, typeFilter, entryTypeFilter, sourceFilter, ruleFilter, emotionFilter, monthFilter, yearFilter, sortField, sortDirection]);
 
   return (
-    <div className="bg-[#0f172a] border border-slate-800 rounded-xl overflow-hidden shadow-xs">
+    <div className={
+      isFullScreen 
+        ? "fixed inset-0 z-50 bg-[#0b0f19] p-3 sm:p-5 overflow-y-auto flex flex-col shadow-2xl" 
+        : "bg-[#0f172a] border border-slate-800 rounded-xl overflow-hidden shadow-xs"
+    }>
       
       {/* Header and Controls Bar */}
       <div className="p-4 border-b border-slate-800 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <h2 className="text-base font-semibold text-slate-100">Trade Execution Ledger</h2>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-base font-semibold text-slate-100 flex items-center gap-2">
+              <span>Trade Execution Ledger</span>
+              {isFullScreen && (
+                <span className="text-[11px] font-mono font-normal text-sky-400 bg-sky-950/50 border border-sky-500/30 px-2 py-0.5 rounded">
+                  Full Screen Active (Esc to Exit)
+                </span>
+              )}
+            </h2>
             <span className="text-xs font-mono text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
               {filteredTrades.length} of {trades.length} entries
             </span>
@@ -224,10 +247,34 @@ export const TradeTable: React.FC<TradeTableProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Full Screen / Exit Full Screen button */}
+            <button
+              type="button"
+              onClick={() => setIsFullScreen(prev => !prev)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all cursor-pointer ${
+                isFullScreen 
+                  ? 'bg-sky-500/20 text-sky-300 border-sky-400 hover:bg-sky-500/30' 
+                  : 'bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white border-slate-700'
+              }`}
+              title={isFullScreen ? "Exit Full Screen (Esc)" : "Open in Full Screen to analyze all trades"}
+            >
+              {isFullScreen ? (
+                <>
+                  <Minimize2 className="w-3.5 h-3.5 text-sky-400" />
+                  <span>Exit Full Screen</span>
+                </>
+              ) : (
+                <>
+                  <Maximize2 className="w-3.5 h-3.5" />
+                  <span>Full Screen</span>
+                </>
+              )}
+            </button>
+
             <button
               onClick={onExportCSV}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-300 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors cursor-pointer"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Export CSV</span>
@@ -236,7 +283,7 @@ export const TradeTable: React.FC<TradeTableProps> = ({
             {trades.length === 0 && (
               <button
                 onClick={onLoadSampleTrades}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-400 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 rounded-lg transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-emerald-400 bg-emerald-950/40 hover:bg-emerald-900/60 border border-emerald-500/30 rounded-lg transition-colors cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5" />
                 <span>Load Sample Trades</span>
@@ -245,7 +292,7 @@ export const TradeTable: React.FC<TradeTableProps> = ({
 
             <button
               onClick={() => onOpenTradeModal()}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-950 bg-emerald-500 hover:bg-emerald-400 rounded-lg transition-colors shadow-xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-950 bg-emerald-500 hover:bg-emerald-400 rounded-lg transition-colors shadow-xs cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
               <span>Add Trade</span>
@@ -435,7 +482,7 @@ export const TradeTable: React.FC<TradeTableProps> = ({
                 </div>
               </th>
               <th className="py-2.5 px-3">Risk %</th>
-              <th className="py-2.5 px-3">MTF</th>
+              <th className="py-2.5 px-3" title="MTF: Margin Trading Facility">MTF</th>
               <th className="py-2.5 px-3 text-right">Plan Entry</th>
               <th className="py-2.5 px-3 text-right">Act. Entry</th>
               <th className="py-2.5 px-3 text-right">Stop Loss</th>
@@ -548,9 +595,12 @@ export const TradeTable: React.FC<TradeTableProps> = ({
                       {trade.riskPerTrade}
                     </td>
 
-                    {/* MTF */}
+                    {/* MTF (Margin Trading Facility) */}
                     <td className="py-2 px-3">
-                      <span className={trade.mtf === 'Yes' ? 'text-emerald-400 font-medium' : 'text-slate-500'}>
+                      <span 
+                        title={`MTF (Margin Trading Facility): ${trade.mtf}`}
+                        className={`font-mono text-xs ${trade.mtf === 'Yes' ? 'text-emerald-400 font-bold bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-500/30' : 'text-slate-500'}`}
+                      >
                         {trade.mtf}
                       </span>
                     </td>

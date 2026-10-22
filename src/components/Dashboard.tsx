@@ -422,14 +422,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-800/80 mb-4">
               <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-sky-400" />
-                <h3 className="text-sm font-semibold text-slate-100">Strategy & Quality Analysis</h3>
+                <Layers className="w-4 h-4 text-emerald-400" />
+                <h3 className="text-sm font-semibold text-slate-100">Strategy & Execution Analytics</h3>
               </div>
               <button
                 onClick={() => onNavigateTab('strategy')}
-                className="text-xs text-sky-400 hover:text-sky-300 font-medium flex items-center gap-1"
+                className="text-xs text-emerald-400 hover:text-emerald-300 font-medium flex items-center gap-1 cursor-pointer"
               >
-                <span>All Strategies</span>
+                <span>Open Analytics</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>

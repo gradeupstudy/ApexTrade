@@ -64,7 +64,7 @@ export const ChartViewerModal: React.FC<ChartViewerModalProps> = ({
                   </>
                 )}
                 <span>·</span>
-                <span>MTF: {trade.mtf}</span>
+                <span>MTF (Margin Trading Facility): <strong className={trade.mtf === 'Yes' ? 'text-emerald-400' : 'text-slate-400'}>{trade.mtf}</strong></span>
                 <span>·</span>
                 <span>Risk: {trade.riskPerTrade}</span>
               </div>

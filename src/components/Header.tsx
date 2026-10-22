@@ -101,8 +101,8 @@ export const Header: React.FC<HeaderProps> = ({
                 : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
             }`}
           >
-            <Layers className="w-4 h-4" />
-            <span>Strategy & Regional</span>
+            <Layers className="w-4 h-4 text-emerald-400" />
+            <span>Analytics</span>
           </button>
 
           <button
@@ -173,7 +173,7 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={() => setActiveTab('strategy')}
           className={`px-2 py-1 rounded ${activeTab === 'strategy' ? 'text-emerald-400 font-semibold' : 'text-slate-400'}`}
         >
-          Strategy
+          Analytics
         </button>
         <button
           onClick={() => setActiveTab('charts')}
